@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+
+import os
+import argparse
+from pycocotools.coco import COCO
+import requests
+
+def truncate(n, decimals=0):
+    """Truncate a number to a specified number of decimal places."""
+    multiplier = 10 ** decimals
+    return int(n * multiplier) / multiplier
+
+class Coco2Yolo:
+    def __init__(self, args):
+        self.dataset_dir = os.path.abspath(args.dataset_dir)
+        self.ann_paths = {
+            "train": args.train_ann,
+            "val": args.val_ann,
+            "test": args.test_ann
+        }
+
+        self.img_dirs = self._initialize_dirs(args, 'img')
+        self.label_dirs = self._initialize_dirs(args, 'label')
+        self.txt_files = {
+            "train": args.train_txt or 'train.txt',
+            "val": args.val_txt or 'val.txt',
+            "test": args.test_txt or 'test.txt'
+        }
+
+        self.categories = self._load_categories(args)
+        self.coco = self._load_coco_annotations()
+        self.names = {k: [cat['name'] for cat in coco.loadCats(coco.getCatIds())] for k, coco in self.coco.items()}
+        print(f"COCO categories: {self.names}\n")
+
+        self._download_images_and_create_structure()
+
+    def _load_categories(self, args):
+        """Load specified categories from command line arguments or file."""
+        if args.cat_file:
+            with open(args.cat_file, 'r') as f:
+                return [line.strip() for line in f.readlines()]
+        elif args.cats:
+            return args.cats.split()
+        return []
+
+    def _initialize_dirs(self, args, dir_type):
+        """Initialize image or label directories based on user input."""
+        dir_mapping = {
+            "train": args.train_img_dir if dir_type == 'img' else args.train_label_dir,
+            "val": args.val_img_dir if dir_type == 'img' else args.val_label_dir,
+            "test": args.test_img_dir if dir_type == 'img' else args.test_label_dir
+        }
+        return {
+            split: os.path.abspath(os.path.join(self.dataset_dir, dir_mapping[split] or f'./{dir_type}s/{split}'))
+            for split in dir_mapping.keys()
+        }
+
+    def _load_coco_annotations(self):
+        """Load COCO annotations from the provided paths."""
+        coco_dict = {}
+        for split, ann_path in self.ann_paths.items():
+            if ann_path:
+                try:
+                    coco = COCO(ann_path)
+                    if self.categories:  # Filter annotations by specified categories
+                        cat_ids = coco.getCatIds(catNms=self.categories)
+                        coco = COCO(ann_path)
+                        coco.dataset['annotations'] = [ann for ann in coco.dataset['annotations'] if ann['category_id'] in cat_ids]
+                    coco_dict[split] = coco
+                except Exception as e:
+                    print(f"Error loading COCO annotations for {split}: {e}")
+        return coco_dict
+
+    def _download_images_and_create_structure(self):
+        """Download images and create directory structure for labels and txt files."""
+        for split, coco in self.coco.items():
+            img_dir = self.img_dirs[split]
+            label_dir = self.label_dirs[split]
+            self._check_and_create_dir(img_dir)
+            self._check_and_create_dir(label_dir)
+
+            img_ids = coco.getImgIds()
+            img_infos = coco.loadImgs(img_ids)
+
+            print(f"Processing {split} images...")
+
+            with open(os.path.join(self.dataset_dir, self.txt_files[split]), 'w') as f_txt:
+                for img_info in img_infos:
+                    img_file_path = os.path.join(img_dir, img_info['file_name'])
+                    if not os.path.exists(img_file_path):
+                        self._download_image(img_info, img_file_path)
+
+                    # Write relative paths to .txt file
+                    f_txt.write(f"./{os.path.relpath(img_file_path, self.dataset_dir)}\n")
+
+                    # Convert annotations to YOLO format
+                    self._convert_to_yolo_format(img_info, split)
+
+    def _download_image(self, img_info, img_file_path):
+        """Download an image and save it to the specified path."""
+        try:
+            print(f"Downloading {img_info['file_name']}...")
+            img_data = requests.get(img_info['coco_url'], timeout=10).content
+            with open(img_file_path, 'wb') as f_img:
+                f_img.write(img_data)
+        except requests.exceptions.RequestException as e:
+            print(f"Failed to download {img_info['file_name']}: {e}")
+
+    def _convert_to_yolo_format(self, img_info, split):
+        """Convert COCO annotations to YOLO format and save to a label file."""
+        dw = 1.0 / img_info['width']
+        dh = 1.0 / img_info['height']
+
+        ann_ids = self.coco[split].getAnnIds(imgIds=img_info['id'])
+        anns = self.coco[split].loadAnns(ann_ids)
+
+        label_file_path = os.path.join(self.label_dirs[split], f"{os.path.splitext(img_info['file_name'])[0]}.txt")
+        with open(label_file_path, 'w') as f_label:
+            for ann in anns:
+                x_center, y_center, w, h = self._compute_yolo_bbox(ann, dw, dh)
+                f_label.write(f"{ann['category_id']} {truncate(x_center, 6)} {truncate(y_center, 6)} {truncate(w, 6)} {truncate(h, 6)}\n")
+
+    def _compute_yolo_bbox(self, ann, dw, dh):
+        """Compute YOLO bounding box from COCO annotation."""
+        xmin = ann['bbox'][0]
+        ymin = ann['bbox'][1]
+        xmax = xmin + ann['bbox'][2]
+        ymax = ymin + ann['bbox'][3]
+
+        x_center = (xmin + xmax) / 2 * dw
+        y_center = (ymin + ymax) / 2 * dh
+        w = (xmax - xmin) * dw
+        h = (ymax - ymin) * dh
+
+        return x_center, y_center, w, h
+
+    def _check_and_create_dir(self, path):
+        """Check if a directory exists, and create it if it does not."""
+        if not os.path.exists(path):
+            print(f"Creating directory: {path}")
+            os.makedirs(path, exist_ok=True)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert COCO dataset to YOLO format and organize the folder structure.")
+
+    parser.add_argument('--train-ann', type=str, required=True, help="Path to the COCO training annotation JSON file.")
+    parser.add_argument('--val-ann', type=str, required=True, help="Path to the COCO validation annotation JSON file.")
+    parser.add_argument('--test-ann', type=str, help="Optional path to the COCO test annotation JSON file.")
+    parser.add_argument('--dataset_dir', type=str, required=True, help='Base directory to save images and labels.')
+
+    parser.add_argument('--train-img-dir', type=str, help="Optional directory name to save training images.")
+    parser.add_argument('--val-img-dir', type=str, help="Optional directory name to save validation images.")
+    parser.add_argument('--test-img-dir', type=str, help="Optional directory name to save test images.")
+
+    parser.add_argument('--train-label-dir', type=str, help="Optional directory name to save training labels.")
+    parser.add_argument('--val-label-dir', type=str, help="Optional directory name to save validation labels.")
+    parser.add_argument('--test-label-dir', type=str, help="Optional directory name to save test labels.")
+
+    parser.add_argument('--train-txt', type=str, help="Optional name for the train.txt file.")
+    parser.add_argument('--val-txt', type=str, help="Optional name for the val.txt file.")
+    parser.add_argument('--test-txt', type=str, help="Optional name for the test.txt file.")
+
+    parser.add_argument('--cats', type=str, help="Space-separated list of categories to include (e.g., 'person dog cat').")
+    parser.add_argument('--cat-file', type=str, help="File path containing newline-separated categories to include.")
+
+    args = parser.parse_args()
+
+    coco2yolo = Coco2Yolo(args)
