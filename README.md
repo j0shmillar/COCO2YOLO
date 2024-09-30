@@ -18,21 +18,22 @@ $ pip install -r requirements.txt
 ## Usage
 
 ```shell
-./coco_to_yolo.py --train-ann <path_to_train_annotations>
-                  --val-ann <path_to_val_annotations>
-                  --dataset_dir <path_to_output_directory>
-                 [--test-ann <path_to_test_annotations>]
-                 [--train-img-dir <train_images_directory>]
-                 [--val-img-dir <val_images_directory>]
-                 [--test-img-dir <test_images_directory>]
-                 [--train-label-dir <train_labels_directory>]
-                 [--val-label-dir <val_labels_directory>]
-                 [--test-label-dir <test_labels_directory>]
-                 [--train-txt <train_txt_file_name>]
-                 [--val-txt <val_txt_file_name>]
-                 [--test-txt <test_txt_file_name>]
-                 [--cats <space_separated_categories>]
-                 [--cat-file <path_to_category_file>]
+chmod +x coco_to_yolo
+./coco_to_yolo  --train-ann <path_to_train_annotations>
+                --val-ann <path_to_val_annotations>
+                --dataset_dir <path_to_output_directory>
+               [--test-ann <path_to_test_annotations>]
+               [--train-img-dir <train_images_directory>]
+               [--val-img-dir <val_images_directory>]
+               [--test-img-dir <test_images_directory>]
+               [--train-label-dir <train_labels_directory>]
+               [--val-label-dir <val_labels_directory>]
+               [--test-label-dir <test_labels_directory>]
+               [--train-txt <train_txt_file_name>]
+               [--val-txt <val_txt_file_name>]
+               [--test-txt <test_txt_file_name>]
+               [--cats <space_separated_categories>]
+               [--cat-file <path_to_category_file>]
 ```
 
 - `--train-ann`: path to the COCO training annotation JSON file.
