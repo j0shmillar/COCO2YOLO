@@ -6,7 +6,7 @@ Converts COCO annotations to YOLO format.
 
 - Converts COCO annotations to YOLO format
 - Downloads and filters images/labels from COCO URLs if missing locally
-- Organizes images/labels into required structure
+- Organizes images/labels into YOLO YAML structure
 
 ## Setup
 
