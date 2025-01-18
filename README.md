@@ -18,8 +18,8 @@ $ pip install -r requirements.txt
 ## Usage
 
 ```shell
-chmod +x coco_to_yolo
-./coco_to_yolo  --train-ann <path_to_train_annotations>
+chmod +x coco2yolo
+./coco2yolo     --train-ann <path_to_train_annotations>
                 --val-ann <path_to_val_annotations>
                 --dataset_dir <path_to_output_directory>
                [--test-ann <path_to_test_annotations>]
