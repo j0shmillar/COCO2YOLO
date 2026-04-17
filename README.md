@@ -1,6 +1,6 @@
-# COCO to YOLO Converter
+## COCO 2 YOLO
 
-Converts COCO annotations to YOLO format.
+Convert COCO annotations to YOLO format.
 
 ## Features
 
@@ -43,7 +43,7 @@ chmod +x coco2yolo
 
 ### Output
 
-The default script will create the following structure in the specified `dataset_dir`:
+Default script creates following structure:
 
 ```
 dataset_dir/
